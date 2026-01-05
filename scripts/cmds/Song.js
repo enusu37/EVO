@@ -4,7 +4,7 @@ const path = require("path");
 
 const baseApiUrl = async () => {
   const res = await axios.get(
-    "https://raw.githubusercontent.com/rummmmna21/rx-api/main/baseApiUrl.json"
+    "https://bank-game-api.cyberbot.top";
   );
   return res.data.api;
 };

@@ -9,9 +9,9 @@ module.exports.config = {
     "log:thread-emoji",
     "call_started"
   ],
-  version: "2.0.0",
+  version: "2.0.1",
   credits: "ALVI",
-  description: "Goat Bot v2 Stylish Group Update Notification"
+  description: "Goat Bot v2 Stylish Group Update Notification (Auto Delete)"
 };
 
 module.exports.run = async function({ api, event, Users }) {
@@ -27,11 +27,14 @@ module.exports.run = async function({ api, event, Users }) {
 ${body}
 ▬▬▬▬▬▬▬▬▬▬▬▬`;
 
+  // ✅ Send and Auto Delete
   const sendAutoDelete = async (msg) => {
-    api.sendMessage(msg, threadID, (err, info) => {
-      if (err) return;
-      setTimeout(() => api.unsendMessage(info.messageID), 5000);
-    });
+    try {
+      const info = await api.sendMessage(msg, threadID);
+      setTimeout(async () => await api.unsendMessage(info.messageID), 5000);
+    } catch (err) {
+      console.log("[GroupUpdate Error]:", err);
+    }
   };
 
   // 💬 GROUP NAME
@@ -54,7 +57,10 @@ ${body}
 
   // 🏷️ NICKNAME
   if (logMessageType === "log:user-nickname") {
-    const targetName = await Users.getNameUser(logMessageData.participant_id);
+    let targetName = "Unknown";
+    try {
+      targetName = await Users.getNameUser(logMessageData.participant_id);
+    } catch {}
     return sendAutoDelete(
       box("✏️ NICKNAME UPDATED",
         `➤ User: ${targetName}\n➤ New Nickname: ${logMessageData.nickname || "Removed"}\n➤ By: ${authorName}`
@@ -64,7 +70,11 @@ ${body}
 
   // 👑 ADMIN ADD / REMOVE
   if (logMessageType === "log:thread-admins") {
-    const targetName = await Users.getNameUser(logMessageData.target_id);
+    let targetName = "Unknown";
+    try {
+      targetName = await Users.getNameUser(logMessageData.target_id);
+    } catch {}
+
     if (logMessageData.ADMIN_EVENT === "add_admin") {
       return sendAutoDelete(
         box("✅ ADMIN ADDED",
@@ -72,6 +82,7 @@ ${body}
         )
       );
     }
+
     if (logMessageData.ADMIN_EVENT === "remove_admin") {
       return sendAutoDelete(
         box("❌ ADMIN REMOVED",

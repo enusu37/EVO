@@ -1,152 +1,99 @@
 const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
-
-const baseApiUrl = async () => {
-  const base = await axios.get(
-    `https://raw.githubusercontent.com/rummmmna21/rx-api/main/baseApiUrl.json?fbclid=IwY2xjawN1LPlleHRuA2FlbQIxMQABHrS3c9PLQEj8--h_gtg-Dn1chJA1PuOg39Bl3_7volMObgoBTusScj7atlSv_aem_Od2q66hLLFpjGWb1_EWUhw`
-  );
-  return base.data.api;
-};
+const API_BASE = "https://bank-game-api.cyberbot.top";
 
 module.exports = {
   config: {
-    name: "sing",
-    version: "2.2.0",
-    author: "RX api x MOHAMMAD AKASH",
+    name: "spin",
+    aliases: ["spinwheel", "roulette"],
+    version: "3.0",
+    author: "Nisanxnx | customised by MAHBUB ULLASH",
+    countDown: 5,
     role: 0,
-    category: "media",
-    shortDescription: "Download audio from YouTube",
-    longDescription: "Search YouTube videos and download audio (MP3 format).",
-    guide: "{pn} [song name | YouTube link]\n\nExample:\n{pn} chipi chipi chapa chapa"
+    shortDescription: { en: "Spin and win coins (API)" },
+    longDescription: { en: "Bet coins, spin the wheel, and win/lose (API-based)" },
+    category: "game",
+    guide: { en: "{p}spin <amount>" }
   },
 
-  onStart: async function ({ api, event, args }) {
-    const checkurl = /^(?:https?:\/\/)?(?:m\.|www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))((\w|-){11})(?:\S+)?$/;
-    const input = args.join(" ");
+  onStart: async function ({ message, event, args, api }) {
+    const uid = event.senderID;
+    const bet = parseInt(args[0]);
 
-    if (!input)
-      return api.sendMessage("❌ Please provide a song name or YouTube link.", event.threadID, event.messageID);
-
-    const isYtLink = checkurl.test(input);
-    const tmpFolder = path.join(__dirname, "tmp");
-    if (!fs.existsSync(tmpFolder)) fs.mkdirSync(tmpFolder, { recursive: true });
-
-    // direct YouTube link
-    if (isYtLink) {
-      const match = input.match(checkurl);
-      const videoID = match ? match[1] : null;
-
-      try {
-        const { data } = await axios.get(`${await baseApiUrl()}/ytDl3?link=${videoID}&format=mp3`);
-        const { title, downloadLink } = data;
-
-        const filePath = path.join(tmpFolder, `${Date.now()}_audio.mp3`);
-        const res = await axios.get(downloadLink, { responseType: "arraybuffer" });
-        fs.writeFileSync(filePath, Buffer.from(res.data));
-
-        return api.sendMessage(
-          { body: `🎵 ${title}`, attachment: fs.createReadStream(filePath) },
-          event.threadID,
-          () => fs.unlinkSync(filePath),
-          event.messageID
-        );
-      } catch (err) {
-        console.error(err);
-        return api.sendMessage("❌ Failed to fetch audio.", event.threadID, event.messageID);
-      }
-    }
-
-    // keyword search
-    let keyWord = input.includes("?feature=share")
-      ? input.replace("?feature=share", "")
-      : input;
-    const maxResults = 6;
+    if (!bet || isNaN(bet) || bet <= 0) return message.reply("❌ Enter a valid bet. Example: spin 50");
+    if (bet < 50) return message.reply("❌ Minimum bet is 50$.");
 
     try {
-      const res = await axios.get(`${await baseApiUrl()}/ytFullSearch?songName=${encodeURIComponent(keyWord)}`);
-      const results = res.data.slice(0, maxResults);
+      const resUser = await axios.get(`${API_BASE}/users/${uid}`);
+      const balance = resUser.data?.money || 0;
 
-      if (!results.length)
-        return api.sendMessage(`⭕ No results found for: ${keyWord}`, event.threadID, event.messageID);
+      if (balance < bet) return message.reply(`❌ Not enough balance. Your balance: ${balance}$`);
 
-      let msg = "🎧 Choose a song below (reply with number 1–6):\n\n";
-      const thumbs = [];
+      const outcomes = [
+        { label: "JACKPOT", multiplier: 3.0, chance: 5 },   
+        { label: "WIN",     multiplier: 2.0, chance: 10 },  
+        { label: "WIN",     multiplier: 1.5, chance: 15 },  
+        { label: "REFUND",  multiplier: 1.0, chance: 10 },  
+        { label: "LOSE",    multiplier: 0.5, chance: 25 },  
+        { label: "LOSE",    multiplier: 0.0, chance: 35 }   
+      ];
 
-      results.forEach((info, i) => {
-        msg += `${i + 1}. ${info.title}\n⏱️ ${info.time}\n📺 ${info.channel.name}\n\n`;
-        thumbs.push(loadStream(info.thumbnail));
-      });
+      const spin = pickByChance(outcomes);
+      const payout = Math.floor(bet * spin.multiplier);
+      const delta = payout - bet; 
 
-      const allThumbs = await Promise.all(thumbs);
+      const resDelta = await axios.post(`${API_BASE}/users/${uid}/balance/delta`, { delta });
+      const newBalance = resDelta.data?.money ?? (balance + delta);
 
-      return api.sendMessage(
-        {
-          body: msg + "🎶 Reply with the number to download the song.",
-          attachment: allThumbs
-        },
-        event.threadID,
-        (err, info) => {
-          global.GoatBot.onReply.set(info.messageID, {
-            commandName: "sing",
-            author: event.senderID,
-            results,
-            messageID: info.messageID // store messageID to unsend later
-          });
-        },
-        event.messageID
-      );
+      const badge =
+        spin.label === "JACKPOT" ? "🏆 JACKPOT!" :
+        spin.label === "WIN" ? "✅ WIN" :
+        spin.label === "REFUND" ? "🔁 REFUND" :
+        "❌ LOSE";
+
+      const finalText =
+        `🎡 SPIN WHEEL\n` +
+        `━━━━━━━━━━━━━━━\n` +
+        `Result: ${badge}\n` +
+        `Bet: ${bet}$\n` +
+        `Payout: ${payout}$\n` +
+        `Balance: ${newBalance}$`;
+
+      const m1 = "🔲⏳🔲⏳";
+      const m2 = "🎡⏳🔲⏳";
+      const m3 = "🎡🎡🔲⏳";
+      const m4 = `🎡🎡🎡⏳`;
+
+      const sent = await message.reply(m1);
+      const msgID = sent.messageID;
+
+      setTimeout(() => safeEdit(api, msgID, m2), 500);
+      setTimeout(() => safeEdit(api, msgID, m3), 1000);
+      setTimeout(() => safeEdit(api, msgID, m4), 1500);
+      setTimeout(() => safeEdit(api, msgID, finalText, () => message.reply(finalText)), 2000);
+
     } catch (err) {
       console.error(err);
-      return api.sendMessage("❌ Error searching for songs.", event.threadID, event.messageID);
-    }
-  },
-
-  onReply: async function ({ api, event, Reply }) {
-    if (event.senderID !== Reply.author) return;
-    const { results, messageID } = Reply;
-    const choice = parseInt(event.body);
-
-    if (isNaN(choice) || choice < 1 || choice > results.length)
-      return api.sendMessage("❌ Please reply with a valid number.", event.threadID, event.messageID);
-
-    const selected = results[choice - 1];
-    const tmpFolder = path.join(__dirname, "tmp");
-    if (!fs.existsSync(tmpFolder)) fs.mkdirSync(tmpFolder, { recursive: true });
-
-    try {
-      // unsend the "Choose a song" message
-      api.unsendMessage(messageID);
-
-      const { data } = await axios.get(`${await baseApiUrl()}/ytDl3?link=${selected.id}&format=mp3`);
-      const { title, quality, downloadLink } = data;
-
-      const filePath = path.join(tmpFolder, `${Date.now()}_audio.mp3`);
-      const res = await axios.get(downloadLink, { responseType: "arraybuffer" });
-      fs.writeFileSync(filePath, Buffer.from(res.data));
-
-      return api.sendMessage(
-        {
-          body: `🎶 Now Playing: ${title}\n📦 Quality: ${quality}`,
-          attachment: fs.createReadStream(filePath)
-        },
-        event.threadID,
-        () => fs.unlinkSync(filePath),
-        event.messageID
-      );
-    } catch (err) {
-      console.error(err);
-      return api.sendMessage("⭕ Error downloading audio (may exceed 26MB).", event.threadID, event.messageID);
+      return message.reply("⚠️ Spin failed (API error).");
     }
   }
 };
 
-// Helper to stream thumbnails
-async function loadStream(url) {
+function pickByChance(items) {
+  const total = items.reduce((s, x) => s + (x.chance || 0), 0);
+  let r = Math.random() * total;
+  for (const it of items) {
+    r -= it.chance;
+    if (r <= 0) return it;
+  }
+  return items[items.length - 1];
+}
+
+function safeEdit(api, messageID, text, fallback) {
   try {
-    const res = await axios.get(url, { responseType: "stream" });
-    return res.data;
-  } catch {
-    return null;
+    api.editMessage(text, messageID, (err) => {
+      if (err && typeof fallback === "function") fallback();
+    });
+  } catch (e) {
+    if (typeof fallback === "function") fallback();
   }
 }

@@ -1,99 +1,88 @@
 const axios = require("axios");
-const API_BASE = "https://bank-game-api.cyberbot.top";
+const fs = require("fs-extra");
 
 module.exports = {
   config: {
-    name: "spin",
-    aliases: ["spinwheel", "roulette"],
-    version: "3.0",
-    author: "Nisanxnx | customised by MAHBUB ULLASH",
-    countDown: 5,
+    name: "sing",
+    aliases: ["song", "music", "audio"],
+    version: "1.0",
+    author: "Gemini | Modified by MAHBUB ULLASH",
+    countDown: 10,
     role: 0,
-    shortDescription: { en: "Spin and win coins (API)" },
-    longDescription: { en: "Bet coins, spin the wheel, and win/lose (API-based)" },
-    category: "game",
-    guide: { en: "{p}spin <amount>" }
+    shortDescription: {
+      en: "Download & play song"
+    },
+    longDescription: {
+      en: "Search YouTube and download song audio with thumbnail"
+    },
+    category: "media",
+    guide: {
+      en: "{p}sing <song name>"
+    }
   },
 
   onStart: async function ({ message, event, args, api }) {
-    const uid = event.senderID;
-    const bet = parseInt(args[0]);
+    const { threadID, messageID } = event;
+    const songName = args.join(" ");
 
-    if (!bet || isNaN(bet) || bet <= 0) return message.reply("❌ Enter a valid bet. Example: spin 50");
-    if (bet < 50) return message.reply("❌ Minimum bet is 50$.");
+    if (!songName) {
+      return message.reply(
+        "❌ গানটির নাম লিখো 😊\nউদাহরণ: sing pal pal"
+      );
+    }
 
     try {
-      const resUser = await axios.get(`${API_BASE}/users/${uid}`);
-      const balance = resUser.data?.money || 0;
+      // 🔍 Searching message
+      await message.reply(
+        `🔍 "${songName}" খোঁজা হচ্ছে...\nএকটু অপেক্ষা করো 🎧`
+      );
 
-      if (balance < bet) return message.reply(`❌ Not enough balance. Your balance: ${balance}$`);
+      // 🔎 YouTube search
+      const searchRes = await axios.get(
+        `https://joshweb.click/search/yt?q=${encodeURIComponent(songName)}`
+      );
 
-      const outcomes = [
-        { label: "JACKPOT", multiplier: 3.0, chance: 5 },   
-        { label: "WIN",     multiplier: 2.0, chance: 10 },  
-        { label: "WIN",     multiplier: 1.5, chance: 15 },  
-        { label: "REFUND",  multiplier: 1.0, chance: 10 },  
-        { label: "LOSE",    multiplier: 0.5, chance: 25 },  
-        { label: "LOSE",    multiplier: 0.0, chance: 35 }   
-      ];
+      const video = searchRes.data?.result?.[0];
+      if (!video) {
+        return message.reply("❌ কোনো গান খুঁজে পাওয়া যায়নি 😔");
+      }
 
-      const spin = pickByChance(outcomes);
-      const payout = Math.floor(bet * spin.multiplier);
-      const delta = payout - bet; 
+      const { title, thumbnail, url } = video;
 
-      const resDelta = await axios.post(`${API_BASE}/users/${uid}/balance/delta`, { delta });
-      const newBalance = resDelta.data?.money ?? (balance + delta);
+      // 🎶 Loading message with thumbnail
+      await api.sendMessage(
+        {
+          body: `🎵 Title: ${title}\n⏳ Song প্রস্তুত হচ্ছে...`,
+          attachment: await global.utils.getStreamFromURL(thumbnail)
+        },
+        threadID
+      );
 
-      const badge =
-        spin.label === "JACKPOT" ? "🏆 JACKPOT!" :
-        spin.label === "WIN" ? "✅ WIN" :
-        spin.label === "REFUND" ? "🔁 REFUND" :
-        "❌ LOSE";
+      // 🎧 Audio download
+      const downloadRes = await axios.get(
+        `https://joshweb.click/api/ytaudio?url=${encodeURIComponent(url)}`
+      );
 
-      const finalText =
-        `🎡 SPIN WHEEL\n` +
-        `━━━━━━━━━━━━━━━\n` +
-        `Result: ${badge}\n` +
-        `Bet: ${bet}$\n` +
-        `Payout: ${payout}$\n` +
-        `Balance: ${newBalance}$`;
+      const audioUrl = downloadRes.data?.result?.download_url;
+      if (!audioUrl) {
+        return message.reply("⚠️ এই গানটি ডাউনলোড করা যাচ্ছে না।");
+      }
 
-      const m1 = "🔲⏳🔲⏳";
-      const m2 = "🎡⏳🔲⏳";
-      const m3 = "🎡🎡🔲⏳";
-      const m4 = `🎡🎡🎡⏳`;
+      // ✅ Send audio
+      return api.sendMessage(
+        {
+          body: `🎶 Now Playing:\n${title}`,
+          attachment: await global.utils.getStreamFromURL(audioUrl)
+        },
+        threadID,
+        messageID
+      );
 
-      const sent = await message.reply(m1);
-      const msgID = sent.messageID;
-
-      setTimeout(() => safeEdit(api, msgID, m2), 500);
-      setTimeout(() => safeEdit(api, msgID, m3), 1000);
-      setTimeout(() => safeEdit(api, msgID, m4), 1500);
-      setTimeout(() => safeEdit(api, msgID, finalText, () => message.reply(finalText)), 2000);
-
-    } catch (err) {
-      console.error(err);
-      return message.reply("⚠️ Spin failed (API error).");
+    } catch (error) {
+      console.error(error);
+      return message.reply(
+        "⚠️ সার্ভার সমস্যা 😢\nপরে আবার চেষ্টা করো।"
+      );
     }
   }
 };
-
-function pickByChance(items) {
-  const total = items.reduce((s, x) => s + (x.chance || 0), 0);
-  let r = Math.random() * total;
-  for (const it of items) {
-    r -= it.chance;
-    if (r <= 0) return it;
-  }
-  return items[items.length - 1];
-}
-
-function safeEdit(api, messageID, text, fallback) {
-  try {
-    api.editMessage(text, messageID, (err) => {
-      if (err && typeof fallback === "function") fallback();
-    });
-  } catch (e) {
-    if (typeof fallback === "function") fallback();
-  }
-}

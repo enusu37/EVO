@@ -1,79 +1,85 @@
-const fs = require("fs");
+const fs = require("fs-extra");
+const axios = require("axios");
 const { downloadVideo } = require("sagor-video-downloader");
 
 module.exports = {
     config: {
         name: "autolink",
-        version: "1.3",
+        version: "2.0",
         author: "ALVI-BOSS",
         countDown: 5,
         role: 0,
-        shortDescription: "Auto-download & send videos silently (no messages)",
+        shortDescription: "Auto-download videos with style",
+        longDescription: "অটোমেটিক ভিডিও ডাউনলোড করে চমৎকার ইন্টারফেসে সেন্ড করবে।",
         category: "media",
+        guide: {
+            en: "{p}{n} [link]"
+        }
     },
 
-    onStart: async function () {},
-
     onChat: async function ({ api, event }) {
-        const threadID = event.threadID;
-        const messageID = event.messageID;
-        const message = event.body || "";
+        const { threadID, messageID, body } = event;
+        if (!body) return;
 
-        const linkMatches = message.match(/(https?:\/\/[^\s]+)/g);
-        if (!linkMatches || linkMatches.length === 0) return;
+        const linkMatches = body.match(/(https?:\/\/[^\s]+)/g);
+        if (!linkMatches) return;
 
         const uniqueLinks = [...new Set(linkMatches)];
 
-        api.setMessageReaction("⏳", messageID, () => {}, true);
-
-        let successCount = 0;
-        let failCount = 0;
-
         for (const url of uniqueLinks) {
+            // ১. "দাঁড়া গরিব" মেসেজ পাঠানো
+            const waitMsg = await api.sendMessage("⌛ দাঁড়াগরিব ডাউনলোড করে দিচ্ছে...", threadID, messageID);
+
             try {
                 const { title, filePath } = await downloadVideo(url);
-                if (!filePath || !fs.existsSync(filePath)) throw new Error();
+                
+                if (!filePath || !fs.existsSync(filePath)) {
+                    throw new Error("ফাইল পাওয়া যায়নি");
+                }
 
                 const stats = fs.statSync(filePath);
-                const fileSizeInMB = stats.size / (1024 * 1024);
+                const fileSizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
 
-                if (fileSizeInMB > 25) {
+                // সাইজ ২৫ এমবি এর বেশি হলে
+                if (parseFloat(fileSizeInMB) > 25) {
+                    await api.sendMessage(`⚠️ ফাইলটি খুব বড় (${fileSizeInMB}MB), লিমিট ২৫ এমবি।`, threadID);
                     fs.unlinkSync(filePath);
-                    failCount++;
+                    api.unsendMessage(waitMsg.messageID);
                     continue;
                 }
 
-                await api.sendMessage(
-                    {
-                        body: `🎬 *${title || "ভিডিও"}*`,
-                        attachment: fs.createReadStream(filePath)
-                    },
-                    threadID,
-                    () => fs.unlinkSync(filePath)
-                );
+                // সময় ও তারিখ
+                const time = new Date().toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: true });
+                const date = new Date().toLocaleDateString('en-GB');
 
-                successCount++;
+                // ২. ভিডিও পাঠানো (আপনার ছবির স্টাইলে মেসেজ)
+                const msgBody = `╭────────────❍\n` +
+                                `│ 📛 SIZUKA DOWNLOADER ♻️\n` +
+                                `├───────────────\n` +
+                                `│ 📌 TITLE : ${title || "Undefined"}\n` +
+                                `│ 🌍 PLATFORM : VIDEO\n` +
+                                `│ 📦 SIZE  : ${fileSizeInMB} MB\n` +
+                                `│ 📂 FORMAT : MP4\n` +
+                                `├───────────────\n` +
+                                `│ 📅 DATE : ${date}\n` +
+                                `│ 🕒 TIME : ${time}\n` +
+                                `╰────────────❍`;
 
-            } catch {
-                failCount++;
-                // কোনো এরর মেসেজ পাঠাবে না
+                await api.sendMessage({
+                    body: msgBody,
+                    attachment: fs.createReadStream(filePath)
+                }, threadID);
+
+                // ৩. কাজ শেষ হলে "দাঁড়াগরিব" মেসেজটি ডিলিট করা
+                api.unsendMessage(waitMsg.messageID);
+                
+                // ফাইল ডিলিট করা স্টোরেজ সেভ করতে
+                fs.unlinkSync(filePath);
+
+            } catch (error) {
+                console.error(error);
+                api.unsendMessage(waitMsg.messageID); // এরর হলেও ওয়েটিং মেসেজ মুছে যাবে
             }
-        }
-
-        const finalReaction =
-            successCount > 0 && failCount === 0 ? "✅" :
-            successCount > 0 ? "⚠️" : "❌";
-
-        api.setMessageReaction(finalReaction, messageID, () => {}, true);
-
-        // সারাংশ মেসেজ চাইলে নিচেরটা অন রাখো, না চাইলে কমেন্ট করে দিও ↓
-        if (uniqueLinks.length > 1) {
-            setTimeout(() => {
-                api.sendMessage(
-                    `📊 সারাংশ: ✅ ${successCount} সফল | ❌ ${failCount} ব্যর্থ`,
-                    threadID
-                );
-            }, 2000);
         }
     }
 };

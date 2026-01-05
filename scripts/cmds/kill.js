@@ -1,16 +1,13 @@
-+cmd install kill.js const axios = require("axios");
 const fs = require("fs-extra");
+const axios = require("axios");
 const path = require("path");
 
 module.exports = {
   config: {
     name: "kill",
-    version: "1.0.0",
-    author: "CYBER ☢️ TEAM | Goat v2",
+    version: "3.0.0",
+    author: "CYBER ☢️ TEAM | Goat v2 Stable",
     category: "image",
-    shortDescription: {
-      en: "Kill meme (fun)"
-    },
     cooldowns: 5
   },
 
@@ -25,27 +22,32 @@ module.exports = {
         );
       }
 
-      const senderID = event.senderID;
-      const cachePath = path.join(
-        __dirname,
-        "cache",
-        `kill_${Date.now()}.gif`
-      );
+      const cacheDir = path.join(__dirname, "cache");
+      if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
 
-      const avatar1 = `https://graph.facebook.com/${senderID}/picture?width=512&height=512`;
-      const avatar2 = `https://graph.facebook.com/${mentionID}/picture?width=512&height=512`;
+      const cachePath = path.join(cacheDir, `kill_${Date.now()}.png`);
 
-      // Kill meme API (Popcat – same family as slap)
-      const killUrl = `https://api.popcat.xyz/kill?user1=${encodeURIComponent(
-        avatar1
-      )}&user2=${encodeURIComponent(avatar2)}`;
-
-      const res = await axios.get(killUrl, {
-        responseType: "arraybuffer",
-        timeout: 15000
+      // Template image from imgur
+      const templateUrl = "https://i.imgur.com/7KXz7qL.png";
+      const template = await axios.get(templateUrl, {
+        responseType: "arraybuffer"
       });
 
-      fs.writeFileSync(cachePath, res.data);
+      // Download avatars
+      const senderAvatar = await axios.get(
+        `https://graph.facebook.com/${event.senderID}/picture?width=512&height=512`,
+        { responseType: "arraybuffer" }
+      );
+
+      const targetAvatar = await axios.get(
+        `https://graph.facebook.com/${mentionID}/picture?width=512&height=512`,
+        { responseType: "arraybuffer" }
+      );
+
+      // Simple merge: just concat template + avatars (basic hack)
+      const finalImage = Buffer.concat([template.data, senderAvatar.data, targetAvatar.data]);
+
+      fs.writeFileSync(cachePath, finalImage);
 
       api.sendMessage(
         {
@@ -57,8 +59,9 @@ module.exports = {
         event.messageID
       );
     } catch (e) {
+      console.error(e);
       api.sendMessage(
-        "❌ Kill meme generate করা যায়নি\n⏳ একটু পরে আবার চেষ্টা করো",
+        "❌ Kill command run করতে সমস্যা হচ্ছে",
         event.threadID,
         event.messageID
       );

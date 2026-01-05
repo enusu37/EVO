@@ -21,7 +21,6 @@ module.exports = {
     if (!body || body.length > 2) return;
 
     const emojiAudioMap = {
- catbox.moe/4x9ek6.mp3",
 "💛": "https://files.catbox.moe/iadsrj.mp3",
 "🧡": "https://files.catbox.moe/iadsrj.mp3",
 "💚": "https://files.catbox.moe/iadsrj.mp3",

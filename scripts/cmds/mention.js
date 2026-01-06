@@ -36,9 +36,6 @@ module.exports = {
     let repeatCount = isNaN(count) ? 5 : Math.min(count, 50); // Limit to 50 for safety
 
     const mentionIDs = Object.keys(mentions);
-    
-    api.sendMessage(`🎀 𝐒𝐭𝐚𝐫𝐭𝐢𝐧𝐠 𝐌𝐞𝐧𝐭𝐢𝐨𝐧 𝐒𝐩𝐚𝐦...\n━━━━━━━━━━━━━━━━\n🎀 𝐓𝐚𝐫𝐠𝐞𝐭𝐬: ${mentionIDs.length}\n🎀 𝐑𝐞𝐩𝐞𝐚𝐭: ${repeatCount} times\n━━━━━━━━━━━━━━━━`, threadID);
-
     for (let i = 0; i < repeatCount; i++) {
       // Small delay to prevent spam trigger issues
       await new Promise(resolve => setTimeout(resolve, 1500)); 
@@ -56,7 +53,4 @@ module.exports = {
         }
       }
     }
-
-    return api.sendMessage(`✅ 𝐌𝐞𝐧𝐭𝐢𝐨𝐧 𝐒𝐞𝐬𝐬𝐢𝐨𝐧 𝐂𝐨𝐦𝐩𝐥𝐞𝐭𝐞𝐝!`, threadID);
-  }
 };

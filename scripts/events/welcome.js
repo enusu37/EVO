@@ -1,105 +1,143 @@
 const { getTime, drive } = global.utils;
-const { nickNameBot } = global.GoatBot.config;
+const { createCanvas, loadImage, registerFont } = require("canvas");
+const axios = require("axios");
+const fs = require("fs-extra");
+const path = require("path");
+
+if (!global.temp.welcomeEvent)
+  global.temp.welcomeEvent = {};
+
+(async () => {
+  try {
+    const fontPath = path.join(__dirname, "cache", "english.ttf");
+    if (!fs.existsSync(fontPath)) {
+      console.log("u");
+      const fontUrl = "https://raw.githubusercontent.com/cyber-ullash/cyber-ullash/main/english.ttf";
+      const { data } = await axios.get(fontUrl, { responseType: "arraybuffer" });
+      await fs.outputFile(fontPath, data);
+      console.log("l");
+    }
+    registerFont(fontPath, { family: "ModernoirBold" });
+    console.log("l");
+  } catch (err) {
+    console.error("❌ Font a s h error:", err);
+  }
+})();
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  if (!text) return y;
+  const words = text.split(" ");
+  let line = "";
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + " ";
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && n > 0) {
+      ctx.fillText(line.trim(), x, y);
+      line = words[n] + " ";
+      y += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line.trim(), x, y);
+  return y;
+}
+
+const WELCOME_GIF_URL = "https://files.catbox.moe/38guc2.gif";
+
+async function sendWelcomeGifMessage(api, threadID, bodyText) {
+  try {
+    const gifPath = path.join(__dirname, "cache", "welcome_bot.gif");
+
+    if (!fs.existsSync(gifPath)) {
+      const { data } = await axios.get(WELCOME_GIF_URL, { responseType: "arraybuffer" });
+      await fs.outputFile(gifPath, data);
+    }
+
+    await api.sendMessage(
+      {
+        body: bodyText,
+        attachment: fs.createReadStream(gifPath)
+      },
+      threadID
+    );
+  } catch (err) {
+    console.error("Failed to send welcome gif message:", err);
+    try {
+      await api.sendMessage(bodyText, threadID);
+    } catch (e) {
+      console.error("Failed to send fallback welcome message:", e);
+    }
+  }
+}
 
 module.exports = {
   config: {
     name: "welcome",
-    version: "3.0",
-    author: "ALVI-BOSS",
+    version: "2.0.0",
+    author: "MAHBUB ULLASH",
     category: "events"
   },
 
   langs: {
+    vi: {
+      session1: "sáng",
+      session2: "trưa",
+      session3: "chiều",
+      session4: "tối",
+      welcomeMessage: "Cảm ơn bạn đã mời tôi vào nhóm!\nPrefix bot: %1\nĐể xem danh sách lệnh hãy nhập: %1help",
+      multiple1: "bạn",
+      multiple2: "các bạn",
+      defaultWelcomeMessage: "Xin chào {userName}.\nChào mừng bạn đến với {boxName}.\nChúc bạn có buổi {session} vui vẻ!"
+    },
     en: {
-      defaultWelcomeMessage:
-`╔════════════════════╗
-   ◇ 💠 আসসালামু আলাইকুম 💠 ◇
-╚════════════════════╝
-
-🖤 𝗗𝗘𝗔𝗥 𝗡𝗘𝗪 𝗠𝗘𝗠𝗕𝗘𝗥 ↓
-➤ {userName} 🌸
-
-██████ 𝗪𝗘𝗟𝗖𝗢𝗠𝗘 ██████
-
-⬇️ 𝗧𝗢 →
-☢️ {threadName} ☢️
-
-🎉 𝗬𝗢𝗨'𝗥𝗘 𝗧𝗛𝗘 『{memberCount}』𝗠𝗘𝗠𝗕𝗘𝗥  
-𝗢𝗙 𝗧𝗛𝗜𝗦 𝗚𝗥𝗢𝗨𝗣 🎊
-
-👤 𝗔𝗗𝗗𝗘𝗗 𝗕𝗬 ↓
-➤ {inviterName}
-
-🌟 আশা করি আপনি এখানে অনেক মজা করবেন,
-হাসবেন, আড্ডা দিবেন 🥰  
-সবার সাথে মিলে সুন্দর বন্ধুত্ব গড়ে তুলবেন 💞
-
-⚡ 𝗚𝗥𝗢𝗨𝗣 𝗥𝗨𝗟𝗘𝗦 :
-➤ সবার প্রতি সম্মান দেখাবেন 🤝  
-➤ কোনো প্রকার অশ্লীলতা চলবে না 🚫  
-➤ এডমিনের নির্দেশ মানতে হবে ✅
-
-❤️ 𝗠𝗮𝗱𝗲 𝗕𝘆 : Ebrahim-𝗕𝗼𝘀𝘀 ❤️
-`,
-      botAddedMessage:
-`🤖 𝗖𝗬𝗕𝗘𝗥 𝗕𝗢𝗧 𝗔𝗖𝗧𝗜𝗩𝗘 ✅
-
-⚙️ Prefix : /
-📜 Type /help for commands
-
-🔥 Let's rule the group together 🔥
-— ALVI-BOSS`
+      session1: "morning",
+      session2: "noon",
+      session3: "afternoon",
+      session4: "evening",
+      welcomeMessage: "Thank you for inviting me to the group!\nBot prefix: %1\nTo view the list of commands, please enter: %1help",
+      multiple1: "you",
+      multiple2: "you guys",
+      defaultWelcomeMessage: `Hello {userName}.\nWelcome {multiple} to the chat group: {boxName}\nHave a nice {session} 😊`
     }
   },
 
-  onStart: async ({ threadsData, message, event, api, usersData, getLang }) => {
-    if (event.logMessageType !== "log:subscribe") return;
+  onStart: async ({ threadsData, message, event, api, getLang, usersData }) => {
+    if (event.logMessageType == "log:subscribe")
+      return async function () {
+        const { threadID } = event;
+        const { nickNameBot } = global.GoatBot.config;
+        const prefix = global.utils.getPrefix(threadID);
+        const dataAddedParticipants = event.logMessageData.addedParticipants;
+        const botID = api.getCurrentUserID();
 
-    const threadID = event.threadID;
-    const threadData = await threadsData.get(threadID);
-    if (!threadData.settings.sendWelcomeMessage) return;
+        if (dataAddedParticipants.some((item) => item.userFbId == botID)) {
+          if (nickNameBot)
+            api.changeNickname(nickNameBot, threadID, botID);
 
-    const addedMembers = event.logMessageData.addedParticipants;
-    const threadName = threadData.threadName;
+          const { threadApproval } = global.GoatBot.config;
+          if (threadApproval && threadApproval.enable) {
+            try {
+              const isAutoApprovedThread = threadApproval.autoApprovedThreads && threadApproval.autoApprovedThreads.includes(threadID);
 
-    for (const user of addedMembers) {
-      const userID = user.userFbId;
-      const botID = api.getCurrentUserID();
+              if (isAutoApprovedThread) {
+                await threadsData.set(threadID, { approved: true });
+                console.log(`Auto-approved thread ${threadID} from autoApprovedThreads list`);
 
-      // Bot added
-      if (userID == botID) {
-        if (nickNameBot)
-          await api.changeNickname(nickNameBot, threadID, botID);
-        return message.send(getLang("botAddedMessage"));
-      }
+                setTimeout(async () => {
+                  try {
+                    const text = getLang("welcomeMessage", prefix);
+                    await sendWelcomeGifMessage(api, threadID, text);
+                  } catch (err) {
+                    console.error(`Failed to send welcome message to auto-approved thread ${threadID}:`, err.message);
+                  }
+                }, 2000);
+                return null;
+              }
 
-      const userName = user.fullName;
-      const inviterName = await usersData.getName(event.author);
-      const memberCount = event.participantIDs.length;
+              await threadsData.set(threadID, { approved: false });
 
-      let welcomeMessage = getLang("defaultWelcomeMessage")
-        .replace(/\{userName\}/g, userName)
-        .replace(/\{threadName\}/g, threadName)
-        .replace(/\{memberCount\}/g, memberCount)
-        .replace(/\{inviterName\}/g, inviterName);
-
-      const form = {
-        body: welcomeMessage,
-        mentions: [{ tag: userName, id: userID }]
-      };
-
-      // Attachment support
-      if (threadData.data.welcomeAttachment) {
-        const files = threadData.data.welcomeAttachment;
-        const attachments = files.map(file =>
-          drive.getFile(file, "stream")
-        );
-        form.attachment = (await Promise.allSettled(attachments))
-          .filter(i => i.status === "fulfilled")
-          .map(i => i.value);
-      }
-
-      message.send(form);
-    }
-  }
-};
+              if (threadApproval.adminNotificationThreads && threadApproval.adminNotificationThreads.length > 0 && threadApproval.sendNotifications !== false) {
+                setTimeout(async () => {
+                  try {
+                    let threadInfo = { threadName: "Unknown", participantIDs: [] };

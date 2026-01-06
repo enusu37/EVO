@@ -20,9 +20,7 @@ module.exports = {
     const cacheDir = path.join(__dirname, "cache");
     const toiletImagePath = path.join(cacheDir, "toilet.png");
 
-    if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { recursive: true });
-    }
+    if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
 
     if (!fs.existsSync(toiletImagePath)) {
       try {
@@ -34,40 +32,25 @@ module.exports = {
         ).data;
 
         fs.writeFileSync(toiletImagePath, Buffer.from(imageBuffer));
-        console.log("Toilet image downloaded successfully!");
+        console.log("✅ Toilet image downloaded successfully!");
       } catch (err) {
-        console.log("Failed to download toilet image:", err.message);
+        console.log("❌ Failed to download toilet image:", err.message);
       }
     }
   },
 
-  onStart: async function ({ api, event, args, usersData, currencies }) {
+  onStart: async function ({ api, event, args }) {
     const { threadID, messageID, senderID } = event;
 
     const mentionedIDs = Object.keys(event.mentions || {});
     const mentionedID = mentionedIDs[0];
 
-    const randomPercent = Math.floor(Math.random() * 101);
-    const randomAmount = Math.floor(Math.random() * 100000) + 100000;
-
-    await currencies.increaseMoney(
-      senderID,
-      parseInt(randomPercent * randomAmount)
-    );
-
     if (!mentionedID) {
-      return api.sendMessage(
-        "⚠️ | Please tag 1 person",
-        threadID,
-        messageID
-      );
+      return api.sendMessage("⚠️ | Please tag 1 person", threadID, messageID);
     }
 
     try {
-      const outputPath = await this.makeImage({
-        senderID,
-        mentionedID
-      });
+      const outputPath = await this.makeImage({ senderID, mentionedID });
 
       return api.sendMessage(
         {
@@ -90,21 +73,12 @@ module.exports = {
   makeImage: async function ({ senderID, mentionedID }) {
     const cacheDir = path.join(__dirname, "cache");
 
-    const toiletBase = await jimp.read(
-      path.join(cacheDir, "toilet.png")
-    );
+    const toiletBase = await jimp.read(path.join(cacheDir, "toilet.png"));
 
-    const senderAvatarPath = path.join(
-      cacheDir,
-      `avt_${senderID}.png`
-    );
-    const mentionedAvatarPath = path.join(
-      cacheDir,
-      `avt_${mentionedID}.png`
-    );
+    const senderAvatarPath = path.join(cacheDir, `avt_${senderID}.png`);
+    const mentionedAvatarPath = path.join(cacheDir, `avt_${mentionedID}.png`);
 
-    const access_token =
-      "6628568379|c1e620fa708a1d5696fb991c1bde5662";
+    const access_token = "6628568379|c1e620fa708a1d5696fb991c1bde5662";
 
     const senderAvatar = (
       await axios.get(
@@ -112,11 +86,7 @@ module.exports = {
         { responseType: "arraybuffer" }
       )
     ).data;
-
-    fs.writeFileSync(
-      senderAvatarPath,
-      Buffer.from(senderAvatar)
-    );
+    fs.writeFileSync(senderAvatarPath, Buffer.from(senderAvatar));
 
     const mentionedAvatar = (
       await axios.get(
@@ -124,39 +94,19 @@ module.exports = {
         { responseType: "arraybuffer" }
       )
     ).data;
-
-    fs.writeFileSync(
-      mentionedAvatarPath,
-      Buffer.from(mentionedAvatar)
-    );
+    fs.writeFileSync(mentionedAvatarPath, Buffer.from(mentionedAvatar));
 
     const senderCircular = await this.circle(senderAvatarPath);
-    const mentionedCircular = await this.circle(
-      mentionedAvatarPath
-    );
+    const mentionedCircular = await this.circle(mentionedAvatarPath);
 
-    const outputPath = path.join(
-      cacheDir,
-      `toilet_${senderID}_${mentionedID}.png`
-    );
+    const outputPath = path.join(cacheDir, `toilet_${senderID}_${mentionedID}.png`);
 
     toiletBase
       .resize(292, 345)
-      .composite(
-        senderCircular.resize(70, 70),
-        100,
-        200
-      )
-      .composite(
-        mentionedCircular.resize(70, 70),
-        160,
-        200
-      );
+      .composite(senderCircular.resize(70, 70), 100, 200)
+      .composite(mentionedCircular.resize(70, 70), 160, 200);
 
-    const finalBuffer = await toiletBase.getBufferAsync(
-      "image/png"
-    );
-
+    const finalBuffer = await toiletBase.getBufferAsync("image/png");
     fs.writeFileSync(outputPath, finalBuffer);
 
     fs.unlinkSync(senderAvatarPath);

@@ -1,7 +1,7 @@
 const fs = require("fs-extra");
 const path = require("path");
 const axios = require("axios");
-const jimp = require("jimp");
+const Jimp = require("jimp"); // ✅ corrected
 
 module.exports = {
   config: {
@@ -39,7 +39,7 @@ module.exports = {
     }
   },
 
-  onStart: async function ({ api, event, args }) {
+  onStart: async function ({ api, event }) {
     const { threadID, messageID, senderID } = event;
 
     const mentionedIDs = Object.keys(event.mentions || {});
@@ -73,13 +73,14 @@ module.exports = {
   makeImage: async function ({ senderID, mentionedID }) {
     const cacheDir = path.join(__dirname, "cache");
 
-    const toiletBase = await jimp.read(path.join(cacheDir, "toilet.png"));
+    const toiletBase = await Jimp.read(path.join(cacheDir, "toilet.png"));
 
     const senderAvatarPath = path.join(cacheDir, `avt_${senderID}.png`);
     const mentionedAvatarPath = path.join(cacheDir, `avt_${mentionedID}.png`);
 
     const access_token = "6628568379|c1e620fa708a1d5696fb991c1bde5662";
 
+    // Fetch sender avatar
     const senderAvatar = (
       await axios.get(
         `https://graph.facebook.com/${senderID}/picture?width=512&height=512&access_token=${access_token}`,
@@ -88,6 +89,7 @@ module.exports = {
     ).data;
     fs.writeFileSync(senderAvatarPath, Buffer.from(senderAvatar));
 
+    // Fetch mentioned avatar
     const mentionedAvatar = (
       await axios.get(
         `https://graph.facebook.com/${mentionedID}/picture?width=512&height=512&access_token=${access_token}`,
@@ -96,6 +98,7 @@ module.exports = {
     ).data;
     fs.writeFileSync(mentionedAvatarPath, Buffer.from(mentionedAvatar));
 
+    // Make circular avatars
     const senderCircular = await this.circle(senderAvatarPath);
     const mentionedCircular = await this.circle(mentionedAvatarPath);
 
@@ -109,6 +112,7 @@ module.exports = {
     const finalBuffer = await toiletBase.getBufferAsync("image/png");
     fs.writeFileSync(outputPath, finalBuffer);
 
+    // Clean up temp avatars
     fs.unlinkSync(senderAvatarPath);
     fs.unlinkSync(mentionedAvatarPath);
 
@@ -116,7 +120,7 @@ module.exports = {
   },
 
   circle: async function (imagePath) {
-    const img = await jimp.read(imagePath);
+    const img = await Jimp.read(imagePath);
     img.circle();
     return img;
   }

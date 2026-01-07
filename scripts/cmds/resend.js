@@ -1,135 +1,101 @@
 const fs = require("fs-extra");
-const axios = require("axios");
+const path = __dirname + "/cacheMsg.json";
 
-if (!fs.existsSync(__dirname + "/cache")) {
-  fs.mkdirSync(__dirname + "/cache");
-}
+// 🔹 ক্যাশ ফাইল তৈরি না থাকলে বানায়
+if (!fs.existsSync(path)) fs.writeFileSync(path, JSON.stringify({}, null, 2));
+
+// 🔸 তোমার UID (Owner)
+const OWNER_ID = "100078049308655";
 
 module.exports = {
   config: {
     name: "resend",
-    aliases: ["rs"],
-    version: "2.0",
-    author: "CYBER TEAM ☢️",
+    version: "4.2.0",
+    author: "Mohammad Akash × ChatGPT",
     role: 0,
-    shortDescription: {
-      en: "Auto resend unsent messages"
-    },
-    longDescription: {
-      en: "Automatically resend messages that someone unsent"
-    },
-    category: "general",
-    guide: {
-      en: "{pn} - toggle resend feature"
-    },
-    dependencies: {
-      "fs-extra": "",
-      axios: ""
-    }
+    shortDescription: "আনসেন্ট হলে মেসেজ ইনবক্সে পাঠাবে",
+    longDescription: "কেউ মেসেজ আনসেন্ট করলে, সেটা সব অ্যাডমিন ও নির্দিষ্ট owner UID-তে পাঠাবে সুন্দর ডিজাইনসহ।",
+    category: "system"
   },
 
-  onStart: async function ({ api, event, threadsData }) {
-    const { threadID } = event;
-
-    let data = await threadsData.get(threadID);
-
-    const current = data?.resend === false ? false : true;
-
-    await threadsData.set(threadID, {
-      resend: !current
-    });
-
-    return api.sendMessage(
-      `🐐 Resend Feature is now ${!current ? "ON" : "OFF"}`,
-      threadID
-    );
+  // 🧠 মেসেজ ক্যাশ সেভ
+  onChat: async function ({ event }) {
+    const { messageID, threadID, senderID, body, attachments } = event;
+    if (!messageID) return;
+    const cache = JSON.parse(fs.readFileSync(path));
+    cache[messageID] = {
+      senderID,
+      threadID,
+      body: body || null,
+      attachments: attachments || []
+    };
+    fs.writeFileSync(path, JSON.stringify(cache, null, 2));
   },
 
-  onChat: async function ({ event, api, usersData }) {
-    const { threadID, messageID, senderID, body, attachments, type, messageReply } = event;
+  // ❌ আনসেন্ট ডিটেকশন
+  onMessageUnsend: async function ({ event, api }) {
+    try {
+      const { messageID, threadID, senderID } = event;
+      const cache = JSON.parse(fs.readFileSync(path));
+      const msgData = cache[messageID];
+      if (!msgData) return;
 
-    if (!global.resendLog) {
-      global.resendLog = new Map();
-    }
+      const threadInfo = await api.getThreadInfo(threadID);
+      const adminIDs = threadInfo.adminIDs.map(item => item.id);
+      const groupName = threadInfo.threadName || "Unnamed Group";
 
-    const botID = api.getCurrentUserID();
+      const userInfo = await api.getUserInfo(senderID);
+      const userName = userInfo[senderID]?.name || "Unknown User";
 
-    let thread = global.db?.threadData?.get(threadID);
+      // 🕒 সময় ও তারিখ (Bangladesh)
+      const now = new Date();
+      const time = now.toLocaleTimeString("bn-BD", { timeZone: "Asia/Dhaka", hour12: true });
+      const date = now.toLocaleDateString("bn-BD");
 
-    if (thread?.resend === false) return;
-    if (senderID == botID) return;
+      // 📄 আনসেন্ট মেসেজের ধরন
+      let msgBody = "";
+      if (msgData.body) msgBody = `💬 মেসেজ: ${msgData.body}`;
+      else if (msgData.attachments.length > 0) {
+        const type = msgData.attachments[0].type;
+        if (type === "photo") msgBody = "📷 একটি ছবি আনসেন্ট করেছে!";
+        else if (type === "video") msgBody = "🎥 একটি ভিডিও আনসেন্ট করেছে!";
+        else if (type === "audio") msgBody = "🎧 একটি ভয়েস মেসেজ আনসেন্ট করেছে!";
+        else msgBody = "📎 একটি ফাইল আনসেন্ট করেছে!";
+      } else msgBody = "❓ কিছু আনসেন্ট করেছে!";
 
-    if (type !== "message_unsend") {
-      global.resendLog.set(messageID, {
-        msgBody: body,
-        attachment: attachments,
-        senderID: senderID
-      });
-    }
+      // 🎨 ডিজাইন আউটপুট
+      const alertMsg =
+`━━━━━━━━━━━━━━━━━━━━━
+🕵️‍♂️ 𝙐𝙉𝙎𝙀𝙉𝘿 𝘼𝙇𝙀𝙍𝙏 ⚠️
+━━━━━━━━━━━━━━━━━━━━━
+👤 ইউজার: ${userName}
+${msgBody}
+🏠 গ্রুপ: ${groupName}
+⏰ সময়: ${time}
+📅 তারিখ: ${date}
+━━━━━━━━━━━━━━━━━━━━━
+𝙱𝚘𝚝 𝙾𝚠𝚗𝚎𝚛 : 𝙼𝚘𝚑𝚊𝚖𝚖𝚊𝚍 𝙰𝚔𝚊𝚜𝚑`;
 
-    if (type === "message_unsend") {
-      const msg = global.resendLog.get(messageID);
-      if (!msg) return;
+      // 📩 রিসিভার লিস্ট (অ্যাডমিন + Owner)
+      const receivers = [...new Set([...adminIDs, OWNER_ID])];
 
-      const name = await usersData.getName(senderID);
+      // 🔁 প্রত্যেককে পাঠানো
+      for (const adminID of receivers) {
+        await api.sendMessage(alertMsg, adminID);
 
-      if (!msg.attachment || msg.attachment.length === 0) {
-        return api.sendMessage(
-          {
-            body: `═════════════════════\n🐐 Goat Chat Bot\n═════════════════════\n\nকই গো সবাই দেখুন🥺\n@${name} এই হালায়\nমাত্র 👉 [${msg.msgBody}] 👈\nএই টেক্সট টা রিমুভ দিছে😁`,
-            mentions: [
-              {
-                tag: name,
-                id: senderID
-              }
-            ]
-          },
-          threadID
-        );
-      }
-
-      let attachmentsList = [];
-      let count = 0;
-
-      for (const file of msg.attachment) {
-        count++;
-        try {
-          const ext = file.url.substring(file.url.lastIndexOf(".") + 1);
-          const filePath = `${__dirname}/cache/resend_${count}.${ext}`;
-
-          const fileData = (
-            await axios.get(file.url, { responseType: "arraybuffer" })
-          ).data;
-
-          fs.writeFileSync(filePath, Buffer.from(fileData));
-
-          attachmentsList.push(fs.createReadStream(filePath));
-        } catch (err) {
-          console.log("Attachment resend error:", err);
+        if (msgData.attachments.length > 0) {
+          for (const att of msgData.attachments) {
+            const stream = await global.utils.getStreamFromURL(att.url);
+            await api.sendMessage({ attachment: stream }, adminID);
+          }
         }
       }
 
-      return api.sendMessage(
-        {
-          body: `🐐 কই গো সবাই দেখুন 😁\n@${name} এই মাত্র মেসেজ রিমুভ দিছিল – আবার পাঠিয়ে দিলামঃ\n\n${msg.msgBody}`,
-          attachment: attachmentsList,
-          mentions: [
-            {
-              tag: name,
-              id: senderID
-            }
-          ]
-        },
-        threadID
-      );
-    }
-  },
+      delete cache[messageID];
+      fs.writeFileSync(path, JSON.stringify(cache, null, 2));
 
-  languages: {
-    en: {
-      on: "ON",
-      off: "OFF",
-      successText: "Resend toggled successfully"
+    } catch (err) {
+      console.error("❌ Resend Error:", err);
     }
   }
 };

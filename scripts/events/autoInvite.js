@@ -1,87 +1,66 @@
 module.exports = {
   config: {
-    name: "autoInvite",
-    eventType: ["log:unsubscribe"],
-    version: "2.0.0",
-    author: "CYBER ☢️_𖣘 -BOT ⚠️ TEAM_ ☢️",
-    description: "Anti-out + Leave notification (Auto re-add with message & gif)",
-    dependencies: {
-      "fs-extra": "",
-      "path": ""
-    }
+    name: "autoinvite",
+    version: "2.5",
+    author: "Mohammad Akash (Modified by ChatGPT)",
+    category: "events"
   },
 
-  run: async function ({ api, event, Users, Threads }) {
-    try {
-      // 🔹 Bot নিজে লিভ করলে কিছু করবে না
-      if (event.logMessageData.leftParticipantFbId == api.getCurrentUserID()) return;
+  onStart: async ({ api, event, usersData, message }) => {
+    if (event.logMessageType !== "log:unsubscribe") return;
 
-      const fs = global.nodemodule["fs-extra"];
-      const path = global.nodemodule["path"];
+    const { threadID, logMessageData, author } = event;
+    const leftID = logMessageData.leftParticipantFbId;
 
-      const threadID = event.threadID;
-      const leftID = event.logMessageData.leftParticipantFbId;
+    const name = await usersData.getName(leftID);
 
-      // 🔹 Thread data
-      const threadData =
-        global.data.threadData.get(threadID) ||
-        (await Threads.getData(threadID)).data ||
-        {};
+    const footer = `
+━━━━━━━━━━━━━━━
+👑 𝗕𝗼𝘁 𝗢𝘄𝗻𝗲𝗿 : 𝐄𝐛𝐫𝐚𝐡𝐢𝐦 💎
+━━━━━━━━━━━━━━━`;
 
-      // 🔹 Antiout off থাকলে শুধু leave message
-      const antiout = threadData.antiout !== false;
+    // 🟢 যদি ইউজার নিজে লিভ নেয়
+    if (leftID === author) {
+      try {
+        await api.addUserToGroup(leftID, threadID);
 
-      // 🔹 User name
-      const name =
-        global.data.userName.get(leftID) ||
-        (await Users.getNameUser(leftID));
+        await message.send({
+          body: `শোন, ${name}, এই গ্রুপ হইলো গ্যাং!
+এখান থেকে যাইতে হলে এডমিনের পারমিশন লাগে!
+তুই পারমিশন ছাড়া লিভ নিছোস – তোকে আবার মাফিয়া স্টাইলে এড দিলাম 😎🔥
+${footer}`
+        });
 
-      // 🔹 Leave type
-      const isSelfLeave = event.author == leftID;
+      } catch (e) {
+        await message.send({
+          body: `সরি বস 😔
+${name} কে আবার এড করতে পারলাম না।
+সম্ভবত উনি বটকে ব্লক করেছে অথবা তার প্রাইভেসি সেটিংসের কারণে এড করা যায় না।
+${footer}`
+        });
+      }
+      return;
+    }
 
-      const typeText = isSelfLeave
-        ? "তোর সাহস কম না 😡 এডমিনের পারমিশন ছাড়া গ্রুপ লিভ নিছোস!"
-        : "তোমার এই গ্রুপে থাকার যোগ্যতা নাই 🤬 তাই লাথি মেরে বের করে দেওয়া হইছে 🤪";
-
-      // 🔹 Leave message
-      let msg =
-        typeof threadData.customLeave === "string"
-          ? threadData.customLeave
-          : `ইস {name} 😢\n{type}\n\n✦───꯭─⃝‌‌𝐄𝐛𝐫𝐚𝐡𝐢𝐦 𝐂𝐡𝐚𝐭 𝐁𝐨𝐭───✦`;
-
-      msg = msg.replace(/{name}/g, name).replace(/{type}/g, typeText);
-
-      // 🔹 Gif setup
-      const gifDir = path.join(__dirname, "Shahadat", "leaveGif");
-      const gifPath = path.join(gifDir, "leave1.gif");
-
-      if (!fs.existsSync(gifDir)) fs.mkdirSync(gifDir, { recursive: true });
-
-      const formMessage = fs.existsSync(gifPath)
-        ? { body: msg, attachment: fs.createReadStream(gifPath) }
-        : { body: msg };
-
-      // 🔹 Send leave message
-      api.sendMessage(formMessage, threadID);
-
-      // 🔹 Anti-out logic (শুধু self leave হলে)
-      if (!antiout || !isSelfLeave) return;
-
-      api.addUserToGroup(leftID, threadID, (err) => {
-        if (err) {
-          return api.sendMessage(
-            `সরি বস 😔\n${name} কে আবার এড করা যায়নি।\nসম্ভবত উনি বটকে ব্লক করেছে অথবা প্রাইভেসি সেটিংসের কারণে এড করা যাচ্ছে না।\n\n────꯭─⃝‌‌𝐄𝐛𝐫𝐚𝐡𝐢𝐦 𝐂𝐡𝐚𝐭 𝐁𝐨𝐭────`,
-            threadID
-          );
-        }
-
-        api.sendMessage(
-          `শোন ${name} 😏\nএই গ্রুপ হইলো গ্যাং 🔥\nএডমিনের পারমিশন ছাড়া লিভ নেওয়া যায় না!\nতাই তোকে আবার মাফিয়া স্টাইলে এড দিলাম 😎\n\n────꯭─⃝‌‌𝐄𝐛𝐫𝐚𝐡𝐢𝐦 𝐂𝐡𝐚𝐭 𝐁𝐨𝐭────`,
-          threadID
-        );
-      });
-    } catch (e) {
-      console.error("❌ autoInvite error:", e);
-  }
+    // 🔴 যদি কোনো মেম্বারকে kick করা হয় (admin দ্বারা)
+    if (leftID !== author) {
+      // যদি এডমিন কাউকে রিমুভ করে
+      if (logMessageData?.kickerFbId) {
+        await message.send({
+          body: `তোমার এই গ্রুপে থাকার কোনো যোগ্যাতা নেই ছাগল 😡
+তাই তোমাকে লাথি মেরে গ্রুপ থেকে বের করে দেওয়া হলো 🤪
+WELLCOME REMOVE 🤧
+${footer}`
+        });
+      } 
+      // যদি সাধারণ মেম্বার লিভ নেয় (rare case)
+      else {
+        await message.send({
+          body: `তোর সাহস কম না 😡😠
+গ্রুপের এডমিনের পারমিশন ছাড়া তুই লিভ নিস!
+${footer}`
+        });
+      }
+    }
   }
 };

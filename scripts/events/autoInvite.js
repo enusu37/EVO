@@ -1,54 +1,87 @@
-const { getTime } = global.utils;
-
 module.exports = {
   config: {
-    name: "autoinvite",
-    version: "2.5",
-    author: "Mohammad Akash",
-    category: "events"
+    name: "autoInvite",
+    eventType: ["log:unsubscribe"],
+    version: "2.0.0",
+    author: "CYBER ☢️_𖣘 -BOT ⚠️ TEAM_ ☢️",
+    description: "Anti-out + Leave notification (Auto re-add with message & gif)",
+    dependencies: {
+      "fs-extra": "",
+      "path": ""
+    }
   },
 
-  onStart: async ({ api, event, usersData, message }) => {
-    if (event.logMessageType !== "log:unsubscribe") return;
+  run: async function ({ api, event, Users, Threads }) {
+    try {
+      // 🔹 Bot নিজে লিভ করলে কিছু করবে না
+      if (event.logMessageData.leftParticipantFbId == api.getCurrentUserID()) return;
 
-    const { threadID, logMessageData, author } = event;
-    const leftID = logMessageData.leftParticipantFbId;
+      const fs = global.nodemodule["fs-extra"];
+      const path = global.nodemodule["path"];
 
-    // যদি কেউ নিজের ইচ্ছায় লিভ নেয় (kick না)
-    if (leftID === author) {
-      const userName = await usersData.getName(leftID);
+      const threadID = event.threadID;
+      const leftID = event.logMessageData.leftParticipantFbId;
 
-      // Messenger-friendly bold font map
-      const boldMap = {
-        A: "𝗔", B: "𝗕", C: "𝗖", D: "𝗗", E: "𝗘", F: "𝗙", G: "𝗚", H: "𝗛", I: "𝗜", J: "𝗝",
-        K: "𝗞", L: "𝗟", M: "𝗠", N: "𝗡", O: "𝗢", P: "𝗣", Q: "𝗤", R: "𝗥", S: "𝗦", T: "𝗧",
-        U: "𝗨", V: "𝗩", W: "𝗪", X: "𝗫", Y: "𝗬", Z: "𝗭",
-        a: "𝗮", b: "𝗯", c: "𝗰", d: "𝗱", e: "𝗲", f: "𝗳", g: "𝗴", h: "𝗵", i: "𝗶", j: "𝗷",
-        k: "𝗸", l: "𝗹", m: "𝗺", n: "𝗻", o: "𝗼", p: "𝗽", q: "𝗾", r: "𝗿", s: "𝘀", t: "𝘁",
-        u: "𝘂", v: "𝘃", w: "𝘄", x: "𝘅", y: "𝘆", z: "𝘇"
-      };
+      // 🔹 Thread data
+      const threadData =
+        global.data.threadData.get(threadID) ||
+        (await Threads.getData(threadID)).data ||
+        {};
 
-      const boldName = userName.split("").map(c => boldMap[c] || c).join("");
+      // 🔹 Antiout off থাকলে শুধু leave message
+      const antiout = threadData.antiout !== false;
 
-      const form = {
-        body: `🛑 এই বলদ....!! 😹  
-${boldName}  
-💬 গ্রুপ থেকে লিভ নেওয়া কি মুখের কথা নাকি? 😏  
-👑 যে গ্রুপে আমি থাকি..?? 🐸  
-⚠️ সেই গ্রুপ থেকে লিভ নেওয়া অসম্ভব ভাই! 😂  
-🌀 আবার অ্যাড করে দিলাম 😇  
+      // 🔹 User name
+      const name =
+        global.data.userName.get(leftID) ||
+        (await Users.getNameUser(leftID));
 
-━━━━━━━━━━━━━━━
-👑 𝗕𝗼𝘁 𝗢𝘄𝗻𝗲𝗿 : 𝐄𝐛𝐫𝐚𝐡𝐢𝐦 💎
-━━━━━━━━━━━━━━━`
-      };
+      // 🔹 Leave type
+      const isSelfLeave = event.author == leftID;
 
-      try {
-        await api.addUserToGroup(leftID, threadID);
-        await message.send(form);
-      } catch (err) {
-        message.send("⚠️ দুঃখিত, আমি ইউজারটাকে আবার অ্যাড করতে পারিনি। সম্ভবত অ্যাড ব্লক করা আছে।");
-      }
-    }
+      const typeText = isSelfLeave
+        ? "তোর সাহস কম না 😡 এডমিনের পারমিশন ছাড়া গ্রুপ লিভ নিছোস!"
+        : "তোমার এই গ্রুপে থাকার যোগ্যতা নাই 🤬 তাই লাথি মেরে বের করে দেওয়া হইছে 🤪";
+
+      // 🔹 Leave message
+      let msg =
+        typeof threadData.customLeave === "string"
+          ? threadData.customLeave
+          : `ইস {name} 😢\n{type}\n\n✦───꯭─⃝‌‌𝐄𝐛𝐫𝐚𝐡𝐢𝐦 𝐂𝐡𝐚𝐭 𝐁𝐨𝐭───✦`;
+
+      msg = msg.replace(/{name}/g, name).replace(/{type}/g, typeText);
+
+      // 🔹 Gif setup
+      const gifDir = path.join(__dirname, "Shahadat", "leaveGif");
+      const gifPath = path.join(gifDir, "leave1.gif");
+
+      if (!fs.existsSync(gifDir)) fs.mkdirSync(gifDir, { recursive: true });
+
+      const formMessage = fs.existsSync(gifPath)
+        ? { body: msg, attachment: fs.createReadStream(gifPath) }
+        : { body: msg };
+
+      // 🔹 Send leave message
+      api.sendMessage(formMessage, threadID);
+
+      // 🔹 Anti-out logic (শুধু self leave হলে)
+      if (!antiout || !isSelfLeave) return;
+
+      api.addUserToGroup(leftID, threadID, (err) => {
+        if (err) {
+          return api.sendMessage(
+            `সরি বস 😔\n${name} কে আবার এড করা যায়নি।\nসম্ভবত উনি বটকে ব্লক করেছে অথবা প্রাইভেসি সেটিংসের কারণে এড করা যাচ্ছে না।\n\n────꯭─⃝‌‌𝐄𝐛𝐫𝐚𝐡𝐢𝐦 𝐂𝐡𝐚𝐭 𝐁𝐨𝐭────`,
+            threadID
+          );
+        }
+
+        api.sendMessage(
+          `শোন ${name} 😏\nএই গ্রুপ হইলো গ্যাং 🔥\nএডমিনের পারমিশন ছাড়া লিভ নেওয়া যায় না!\nতাই তোকে আবার মাফিয়া স্টাইলে এড দিলাম 😎\n\n────꯭─⃝‌‌𝐄𝐛𝐫𝐚𝐡𝐢𝐦 𝐂𝐡𝐚𝐭 𝐁𝐨𝐭────`,
+          threadID
+        );
+      });
+    } catch (e) {
+      console.error("❌ autoInvite error:", e);
+  }
   }
 };

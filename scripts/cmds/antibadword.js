@@ -2,7 +2,9 @@ const fs = require("fs");
 const path = require("path");
 
 const dataPath = path.join(__dirname, "antibadwordData.json");
-if (!fs.existsSync(dataPath)) fs.writeFileSync(dataPath, JSON.stringify({}, null, 2));
+if (!fs.existsSync(dataPath)) {
+  fs.writeFileSync(dataPath, JSON.stringify({}, null, 2));
+}
 
 const badWords = [
   "শালা",
@@ -18,20 +20,27 @@ module.exports = {
   config: {
     name: "antibadword",
     aliases: ["abw"],
-    version: "1.2",
-    author: "SiFu & Ebrahim",
+    version: "1.3",
+    author: "SiFu",
+    countDown: 0,
     role: 1,
-    shortDescription: "Warn bad words then kick user",
-    longDescription: "Detects bad words and warns first, kicks on second offense",
-    category: "group"
+    shortDescription: "Anti bad word system",
+    longDescription: "Warn first time, kick second time",
+    category: "group",
+    guide: {
+      en: "Auto detect bad words in group"
+    }
   },
+
+  // ✅ MUST HAVE (না থাকলে install error দিবে)
+  onStart: async () => {},
 
   onEvent: async ({ event, api }) => {
     try {
       if (!event.isGroup || !event.body) return;
 
-      const msg = event.body.toLowerCase();
-      if (!badWords.some(word => msg.includes(word))) return;
+      const text = event.body.toLowerCase();
+      if (!badWords.some(w => text.includes(w))) return;
 
       const { threadID, senderID } = event;
       const data = JSON.parse(fs.readFileSync(dataPath));
@@ -39,15 +48,15 @@ module.exports = {
       if (!data[threadID]) data[threadID] = {};
       if (!data[threadID][senderID]) data[threadID][senderID] = 0;
 
-      data[threadID][senderID] += 1;
+      data[threadID][senderID]++;
       fs.writeFileSync(dataPath, JSON.stringify(data, null, 2));
 
-      const warnCount = data[threadID][senderID];
+      const warn = data[threadID][senderID];
 
       // 🟡 First warning
-      if (warnCount === 1) {
+      if (warn === 1) {
         await api.sendMessage(
-          `⚠️ 𝗪𝗔𝗥𝗡𝗜𝗡𝗚 ⚠️\n\n@user\nআপনি অশ্লীল ভাষা ব্যবহার করেছেন ❌\n\nআর একবার করলে গ্রুপ থেকে বের করে দেওয়া হবে 👢`,
+          `⚠️ 𝗪𝗔𝗥𝗡𝗜𝗡𝗚 ⚠️\n\n@user\nগালাগালি / অশ্লীল কথা বলা নিষেধ ❌\n\nআর একবার করলে গ্রুপ থেকে বের করে দেওয়া হবে 👢`,
           threadID,
           null,
           { mentions: [{ id: senderID, tag: "@user" }] }
@@ -56,20 +65,17 @@ module.exports = {
       }
 
       // 🔴 Second time kick
-      if (warnCount >= 2) {
+      if (warn >= 2) {
         await api.sendMessage(
-          `🚫 𝗞𝗜𝗖𝗞𝗘𝗗 🚫\n\n@user\nদুইবার অশ্লীল কথা বলার কারণে আপনাকে গ্রুপ থেকে বের করে দেওয়া হলো 😡`,
+          `🚫 𝗞𝗜𝗖𝗞𝗘𝗗 🚫\n\n@user\nবারবার গালাগালি করার কারণে আপনাকে গ্রুপ থেকে বের করে দেওয়া হলো 😡`,
           threadID,
           null,
           { mentions: [{ id: senderID, tag: "@user" }] }
         );
 
-        setTimeout(async () => {
-          try {
-            await api.removeUserFromGroup(senderID, threadID);
-          } catch (err) {
-            console.error("Kick error:", err);
-          }
+        setTimeout(() => {
+          api.removeUserFromGroup(senderID, threadID)
+            .catch(err => console.error("Kick error:", err));
         }, 1500);
       }
 

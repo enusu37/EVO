@@ -1,101 +1,115 @@
 const fs = require("fs-extra");
-const path = __dirname + "/cacheMsg.json";
+const axios = require("axios");
+const path = require("path");
 
-// 🔹 ক্যাশ ফাইল তৈরি না থাকলে বানায়
-if (!fs.existsSync(path)) fs.writeFileSync(path, JSON.stringify({}, null, 2));
-
-// 🔸 তোমার UID (Owner)
-const OWNER_ID = "100065568407761";
+// 🔥 Random Funny Texts
+const funnyTexts = [
+  "🤣 এইডা কী করলা রে ভাই! ডিলিট দিলে কি FBI ভুলে যাবে?",
+  "😹 হায় হায়! মেসেজ ডিলিট করে ভাবছে বাঁচবে!",
+  "🐸 এই হালায় unsend মারছে, সবাই তাকাও!",
+  "🤡 ডিলিট দিলেই কি পাপ ধুয়ে যায়?",
+  "🙈 লজ্জা পাইছে নাকি? তাই মেসেজ উধাও!",
+  "🫣 ভাবছে কেউ দেখেনি! কিন্তু Bot তো দেখছে 😈",
+  "😂 এইটা ডিলিট না করলে ইতিহাস হয়ে যাইতো!",
+  "🚨 UNSEND ALERT 🚨 ধরা খাইছে ভাই!",
+  "😼 মেসেজ মারো, আবার ডিলিট! দুই নাম্বারি!",
+  "🤣🤣 এই গ্রুপে unsend দিলে সম্মান থাকে না!"
+];
 
 module.exports = {
   config: {
     name: "resend",
-    version: "4.2.0",
-    author: "Mohammad Akash × ChatGPT",
+    version: "2.2.0",
+    author: "CYBER TEAM ☢️ (Funny Mod)",
     role: 0,
-    shortDescription: "আনসেন্ট হলে মেসেজ ইনবক্সে পাঠাবে",
-    longDescription: "কেউ মেসেজ আনসেন্ট করলে, সেটা সব অ্যাডমিন ও নির্দিষ্ট owner UID-তে পাঠাবে সুন্দর ডিজাইনসহ।",
-    category: "system"
+    shortDescription: "Auto resend unsent message (funny)",
+    longDescription: "Automatically resend deleted messages with random funny roast",
+    category: "general",
+    countDown: 0
   },
 
-  // 🧠 মেসেজ ক্যাশ সেভ
-  onChat: async function ({ event }) {
-    const { messageID, threadID, senderID, body, attachments } = event;
-    if (!messageID) return;
-    const cache = JSON.parse(fs.readFileSync(path));
-    cache[messageID] = {
-      senderID,
-      threadID,
-      body: body || null,
-      attachments: attachments || []
-    };
-    fs.writeFileSync(path, JSON.stringify(cache, null, 2));
-  },
+  onStart: async function () {},
 
-  // ❌ আনসেন্ট ডিটেকশন
-  onMessageUnsend: async function ({ event, api }) {
-    try {
-      const { messageID, threadID, senderID } = event;
-      const cache = JSON.parse(fs.readFileSync(path));
-      const msgData = cache[messageID];
-      if (!msgData) return;
+  onChat: async function ({ api, event, usersData, threadsData }) {
+    const { threadID, messageID, senderID, body, attachments, type } = event;
 
-      const threadInfo = await api.getThreadInfo(threadID);
-      const adminIDs = threadInfo.adminIDs.map(item => item.id);
-      const groupName = threadInfo.threadName || "Unnamed Group";
+    if (!global.resendData) global.resendData = new Map();
+    const botID = api.getCurrentUserID();
 
-      const userInfo = await api.getUserInfo(senderID);
-      const userName = userInfo[senderID]?.name || "Unknown User";
+    const threadData = await threadsData.get(threadID) || {};
+    if (threadData.resend === false) return;
+    if (senderID === botID) return;
 
-      // 🕒 সময় ও তারিখ (Bangladesh)
-      const now = new Date();
-      const time = now.toLocaleTimeString("bn-BD", { timeZone: "Asia/Dhaka", hour12: true });
-      const date = now.toLocaleDateString("bn-BD");
-
-      // 📄 আনসেন্ট মেসেজের ধরন
-      let msgBody = "";
-      if (msgData.body) msgBody = `💬 মেসেজ: ${msgData.body}`;
-      else if (msgData.attachments.length > 0) {
-        const type = msgData.attachments[0].type;
-        if (type === "photo") msgBody = "📷 একটি ছবি আনসেন্ট করেছে!";
-        else if (type === "video") msgBody = "🎥 একটি ভিডিও আনসেন্ট করেছে!";
-        else if (type === "audio") msgBody = "🎧 একটি ভয়েস মেসেজ আনসেন্ট করেছে!";
-        else msgBody = "📎 একটি ফাইল আনসেন্ট করেছে!";
-      } else msgBody = "❓ কিছু আনসেন্ট করেছে!";
-
-      // 🎨 ডিজাইন আউটপুট
-      const alertMsg =
-`━━━━━━━━━━━━━━━━━━━━━
-🕵️‍♂️ 𝙐𝙉𝙎𝙀𝙉𝘿 𝘼𝙇𝙀𝙍𝙏 ⚠️
-━━━━━━━━━━━━━━━━━━━━━
-👤 ইউজার: ${userName}
-${msgBody}
-🏠 গ্রুপ: ${groupName}
-⏰ সময়: ${time}
-📅 তারিখ: ${date}
-━━━━━━━━━━━━━━━━━━━━━
-𝙱𝚘𝚝 𝙾𝚠𝚗𝚎𝚛 : 𝙼𝚘𝚑𝚊𝚖𝚖𝚊𝚍 𝙰𝚔𝚊𝚜𝚑`;
-
-      // 📩 রিসিভার লিস্ট (অ্যাডমিন + Owner)
-      const receivers = [...new Set([...adminIDs, OWNER_ID])];
-
-      // 🔁 প্রত্যেককে পাঠানো
-      for (const adminID of receivers) {
-        await api.sendMessage(alertMsg, adminID);
-
-        if (msgData.attachments.length > 0) {
-          for (const att of msgData.attachments) {
-            const stream = await global.utils.getStreamFromURL(att.url);
-            await api.sendMessage({ attachment: stream }, adminID);
-          }
-        }
-      }
-
-      delete cache[messageID];
-      fs.writeFileSync(path, JSON.stringify(cache, null, 2));
-
-    } catch (err) {
-      console.error("❌ Resend Error:", err);
+    // Save normal message
+    if (type !== "message_unsend") {
+      global.resendData.set(messageID, {
+        body,
+        attachments,
+        senderID
+      });
+      return;
     }
+
+    // On unsend
+    const oldMsg = global.resendData.get(messageID);
+    if (!oldMsg) return;
+
+    const userName = await usersData.getName(oldMsg.senderID);
+    const roast = funnyTexts[Math.floor(Math.random() * funnyTexts.length)];
+
+    const cacheDir = path.join(__dirname, "cache");
+    if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
+
+    // 📝 TEXT ONLY
+    if (!oldMsg.attachments || oldMsg.attachments.length === 0) {
+      return api.sendMessage({
+        body:
+`${roast}
+
+👤 অপরাধী: @${userName}
+
+📝 যা লিখছিল:
+「 ${oldMsg.body || "কিছু লেখে নাই, তাও ডিলিট 🤡"} 」`,
+        mentions: [{ tag: userName, id: oldMsg.senderID }]
+      }, threadID);
+    }
+
+    // 📸 ATTACHMENT + TEXT
+    let files = [];
+    let i = 0;
+
+    for (const att of oldMsg.attachments) {
+      i++;
+      const ext = att.url.split(".").pop().split("?")[0];
+      const filePath = `${cacheDir}/resend_${Date.now()}_${i}.${ext}`;
+      const data = (await axios.get(att.url, { responseType: "arraybuffer" })).data;
+      fs.writeFileSync(filePath, Buffer.from(data));
+      files.push(fs.createReadStream(filePath));
+    }
+
+    return api.sendMessage({
+      body:
+`${roast}
+
+👤 অপরাধী: @${userName}
+${oldMsg.body ? `📝 Text:\n${oldMsg.body}` : "🙈 কোনো লেখা ছিল না!"}
+
+📸 প্রমাণসহ ধরা খাইছে 🤣`,
+      attachment: files,
+      mentions: [{ tag: userName, id: oldMsg.senderID }]
+    }, threadID);
+  },
+
+  run: async function ({ api, event, threadsData }) {
+    const { threadID } = event;
+    const data = await threadsData.get(threadID) || {};
+
+    data.resend = !data.resend;
+    await threadsData.set(threadID, data);
+
+    return api.sendMessage(
+      `😂 Resend Funny Mode: ${data.resend ? "ON" : "OFF"}`,
+      threadID
+    );
   }
 };

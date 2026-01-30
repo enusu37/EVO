@@ -18,7 +18,7 @@ module.exports = {
   },
 
   onStart: async function ({ api, event, args, message }) {
-    const permission = ["100065568407761"];
+    const permission = ["100065568407761"],["61556979016951"];
 
     if (!permission.includes(event.senderID)) {
       return message.reply("❌ | Only Bot Admin Can Use This Command");
